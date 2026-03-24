@@ -81,37 +81,47 @@ def get_ken_burns_filters(image_index: int, duration: float) -> tuple:
 
 
 def render_ken_burns_clip(image_path: str, output_path: str, filter_str: str, duration: float, use_gpu: bool = True):
-    """Render a single Ken Burns clip with GPU or CPU encoding"""
+    """Render a single Ken Burns clip with GPU (NVENC) or CPU encoding"""
 
-    # Always use CPU for now - zoompan filter is CPU-based anyway
-    # GPU is only beneficial for the final encode, not per-clip
-    cmd = [
-        "ffmpeg", "-y",
-        "-loop", "1",
-        "-i", image_path,
-        "-vf", filter_str,
-        "-t", str(duration),
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-pix_fmt", "yuv420p",
-        "-r", "30",
-        output_path
-    ]
+    if use_gpu:
+        # GPU encoding with NVENC - much faster
+        cmd = [
+            "ffmpeg", "-y",
+            "-loop", "1",
+            "-i", image_path,
+            "-vf", filter_str,
+            "-t", str(duration),
+            "-c:v", "h264_nvenc",
+            "-preset", "p4",
+            "-cq", "23",
+            "-pix_fmt", "yuv420p",
+            "-r", "30",
+            output_path
+        ]
+    else:
+        # CPU fallback
+        cmd = [
+            "ffmpeg", "-y",
+            "-loop", "1",
+            "-i", image_path,
+            "-vf", filter_str,
+            "-t", str(duration),
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-r", "30",
+            output_path
+        ]
 
     print(f"Running FFmpeg: {' '.join(cmd[:10])}...")
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)  # 5 min timeout per clip
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
             print(f"FFmpeg stderr: {result.stderr[:1000]}")
             raise Exception(f"FFmpeg failed with code {result.returncode}")
     except subprocess.TimeoutExpired:
         raise Exception("FFmpeg timed out after 5 minutes")
-
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"FFmpeg error: {result.stderr}")
-        raise Exception(f"FFmpeg failed: {result.returncode}")
 
 
 def check_gpu_available() -> bool:
