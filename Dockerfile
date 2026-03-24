@@ -1,21 +1,54 @@
-FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
+# Use NVIDIA's CUDA devel image for NVENC support
+FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
 
-# Install system dependencies
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+
+# Install dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
-    ffmpeg \
     wget \
     curl \
+    git \
+    nasm \
+    yasm \
+    pkg-config \
+    libx264-dev \
+    libx265-dev \
+    libnuma-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Note: Ubuntu's ffmpeg doesn't have NVENC by default
-# We'll use a custom FFmpeg build with NVIDIA support
-RUN wget -q https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz \
-    && tar -xf ffmpeg-master-latest-linux64-gpl.tar.xz \
-    && cp ffmpeg-master-latest-linux64-gpl/bin/* /usr/local/bin/ \
-    && rm -rf ffmpeg-master-latest-linux64-gpl* \
-    && ffmpeg -version
+# Install NVIDIA Video Codec SDK headers (required for NVENC)
+RUN git clone --depth 1 https://github.com/FFmpeg/nv-codec-headers.git \
+    && cd nv-codec-headers \
+    && make install \
+    && cd .. \
+    && rm -rf nv-codec-headers
+
+# Build FFmpeg with NVENC support
+RUN git clone --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg-src \
+    && cd ffmpeg-src \
+    && ./configure \
+        --enable-nonfree \
+        --enable-cuda-nvcc \
+        --enable-libnpp \
+        --enable-nvenc \
+        --enable-nvdec \
+        --enable-cuvid \
+        --enable-gpl \
+        --enable-libx264 \
+        --enable-libx265 \
+        --extra-cflags=-I/usr/local/cuda/include \
+        --extra-ldflags=-L/usr/local/cuda/lib64 \
+    && make -j$(nproc) \
+    && make install \
+    && cd .. \
+    && rm -rf ffmpeg-src
+
+# Verify NVENC is available
+RUN ffmpeg -hide_banner -encoders | grep nvenc
 
 # Install Python dependencies
 RUN pip3 install --no-cache-dir \
