@@ -69,8 +69,9 @@ def get_ken_burns_filters(image_index: int, duration: float) -> tuple:
 
     if is_zoom:
         # Zoom: IN for first half, OUT for second half
-        first = f"scale=8000:-1,zoompan=z='zoom+{zoom_increment:.6f}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={half_frames}:s=1920x1080:fps=30"
-        second = f"scale=8000:-1,zoompan=z='{end_zoom:.2f}-{zoom_increment:.6f}*on':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={half_frames}:s=1920x1080:fps=30"
+        # Use scale=3840 (2x output) instead of 8000 to reduce memory usage
+        first = f"scale=3840:-1,zoompan=z='zoom+{zoom_increment:.6f}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={half_frames}:s=1920x1080:fps=30"
+        second = f"scale=3840:-1,zoompan=z='{end_zoom:.2f}-{zoom_increment:.6f}*on':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={half_frames}:s=1920x1080:fps=30"
     else:
         # Pan: L→R for first half, R→L for second half
         first = f"scale=2500:-1,crop=1920:1080:'(in_w-1920)*t/{half_duration}':0"
@@ -98,11 +99,14 @@ def render_ken_burns_clip(image_path: str, output_path: str, filter_str: str, du
         output_path
     ]
 
-    print(f"Running FFmpeg: {' '.join(cmd[:8])}...")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"FFmpeg stderr: {result.stderr[:500]}")
-        raise Exception(f"FFmpeg failed: {result.returncode}")
+    print(f"Running FFmpeg: {' '.join(cmd[:10])}...")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)  # 5 min timeout per clip
+        if result.returncode != 0:
+            print(f"FFmpeg stderr: {result.stderr[:1000]}")
+            raise Exception(f"FFmpeg failed with code {result.returncode}")
+    except subprocess.TimeoutExpired:
+        raise Exception("FFmpeg timed out after 5 minutes")
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
