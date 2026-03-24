@@ -82,36 +82,27 @@ def get_ken_burns_filters(image_index: int, duration: float) -> tuple:
 def render_ken_burns_clip(image_path: str, output_path: str, filter_str: str, duration: float, use_gpu: bool = True):
     """Render a single Ken Burns clip with GPU or CPU encoding"""
 
-    if use_gpu:
-        # GPU encoding with NVENC
-        cmd = [
-            "ffmpeg", "-y",
-            "-loop", "1",
-            "-i", image_path,
-            "-vf", filter_str,
-            "-t", str(duration),
-            "-c:v", "h264_nvenc",
-            "-preset", FFMPEG_PRESET,
-            "-cq", FFMPEG_CQ,
-            "-pix_fmt", "yuv420p",
-            "-r", "30",
-            output_path
-        ]
-    else:
-        # CPU fallback
-        cmd = [
-            "ffmpeg", "-y",
-            "-loop", "1",
-            "-i", image_path,
-            "-vf", filter_str,
-            "-t", str(duration),
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "26",
-            "-pix_fmt", "yuv420p",
-            "-r", "30",
-            output_path
-        ]
+    # Always use CPU for now - zoompan filter is CPU-based anyway
+    # GPU is only beneficial for the final encode, not per-clip
+    cmd = [
+        "ffmpeg", "-y",
+        "-loop", "1",
+        "-i", image_path,
+        "-vf", filter_str,
+        "-t", str(duration),
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-r", "30",
+        output_path
+    ]
+
+    print(f"Running FFmpeg: {' '.join(cmd[:8])}...")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"FFmpeg stderr: {result.stderr[:500]}")
+        raise Exception(f"FFmpeg failed: {result.returncode}")
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
